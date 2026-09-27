@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: eve_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: eve_healthcare
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d eve_healthcare"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eve_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PROJECT_NAME: "EVE Healthcare Diagnostic Booking & Payment Service"
+      ENVIRONMENT: "development"
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/eve_healthcare"
+      JWT_SECRET_KEY: "dev-insecure-jwt-secret-key-change-in-production-min-32-chars"
+      JWT_ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+      WEBHOOK_SECRET: "dev-simulated-payment-webhook-secret-key"
+      SEED_ADMIN_EMAIL: "admin@evehealth.com"
+      SEED_ADMIN_PASSWORD: "AdminSecret123!"
+      SEED_PATIENT_EMAIL: "patient@evehealth.com"
+      SEED_PATIENT_PASSWORD: "PatientSecret123!"
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    command: >
+      sh -c "alembic upgrade head &&
+             python -m app.db.seed &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+volumes:
+  postgres_data:
